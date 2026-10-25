@@ -452,8 +452,12 @@ jobs:
     # module lists (modules.bzl / BUILD.bazel, //common:gki_system_dlkm_modules)
     # still expect their .ko outputs. Same class of fix as the built-in zram
     # cleanup (0b398f9): strip the dead entries so KernelBuild matches reality.
+    # DISABLED in safe mode: IoT stacks are back to =m, their .ko outputs are
+    # expected in gki_system_dlkm_modules again. Stripping the entries makes
+    # kleaf fail with "built but not copied". Re-enable only together with the
+    # IoT =n config deltas.
     - name: Drop disabled IoT modules from kleaf module lists (houji)
-      if: inputs.version == 'android14-6.1'
+      if: false # safe mode: IoT =m restored, entries must stay
       shell: bash
       working-directory: ${{ github.workspace }}/kernel/common
       run: |
