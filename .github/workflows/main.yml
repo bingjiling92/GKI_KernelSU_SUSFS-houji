@@ -792,12 +792,6 @@ jobs:
     # feat/hybridmount-vfs-6.1.138: VFS is built into the kernel; no NoMount
     # metamodule artifact is produced on this branch. Job disabled.
     if: "false" # hybridmount branch: disabled
-    # Scheduled (nightly) runs carry NO inputs at all - inputs.use_nomount is
-    # empty, not true - so the inner steps' `if: inputs.use_nomount` gates
-    # would skip everything and produce no metamodule artifact. Compute the
-    # effective flag once here and have the steps key off the job-level
-    # env instead of the raw input.
-    if: "(github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') && !inputs.test_release_notes"
     env:
       NOMOUNT_WANTED: ${{ inputs.use_nomount || (github.event_name == 'schedule' && true) || false }}
     runs-on: ubuntu-latest
