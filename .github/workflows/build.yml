@@ -441,11 +441,46 @@ jobs:
         config_list: |
           CONFIG_CAN=n
           CONFIG_CAN_NETLINK=n
+          CONFIG_CAN_DEV=n
+          CONFIG_CAN_RX_OFFLOAD=n
+          CONFIG_GKI_HIDDEN_MCP251XFD_CONFIGS=n
+          CONFIG_GKI_HIDDEN_6LOWPAN_CONFIGS=n
+          CONFIG_GKI_HIDDEN_IEEE802154_CONFIGS=n
+          CONFIG_GKI_HIDDEN_TIPC_CONFIGS=n
           CONFIG_6LOWPAN=n
           CONFIG_IEEE802154=n
           CONFIG_TIPC=n
           CONFIG_ZRAM=m
           CONFIG_ZRAM_WRITEBACK=n
+
+    # CAN/6LoWPAN/IEEE802154/TIPC are now built out of the kernel, but kleaf's
+    # module lists (modules.bzl / BUILD.bazel, //common:gki_system_dlkm_modules)
+    # still expect their .ko outputs. Same class of fix as the built-in zram
+    # cleanup (0b398f9): strip the dead entries so KernelBuild matches reality.
+    - name: Drop disabled IoT modules from kleaf module lists (houji)
+      if: inputs.version == 'android14-6.1'
+      shell: bash
+      working-directory: ${{ github.workspace }}/kernel/common
+      run: |
+        set -euo pipefail
+        for f in modules.bzl BUILD.bazel; do
+          [ -f "$f" ] || continue
+          if grep -qE '(can|6lowpan|ieee802154|tipc|nhc_)' "$f"; then
+            echo "[+] cleaning IoT module entries from $f"
+            sed -i \
+              -e '\#drivers/net/can/#d' \
+              -e '\#net/can/#d' \
+              -e '\#net/6lowpan/#d' \
+              -e '\#net/ieee802154/#d' \
+              -e '\#net/mac802154/#d' \
+              -e '\#net/tipc/#d' \
+              -e '\#drivers/net/mctp/#d' \
+              "$f"
+            echo "[+] remaining IoT hits in $f: $(grep -cE '(/can/|/6lowpan/|/ieee802154/|/mac802154/|/tipc/)' "$f" || true)"
+          else
+            echo "[+] $f has no IoT module entries"
+          fi
+        done
 
     - name: Apply ABI Compare Bypass
       if: false
