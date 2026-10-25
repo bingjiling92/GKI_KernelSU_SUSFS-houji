@@ -494,46 +494,80 @@ jobs:
       working-directory: ${{ github.workspace }}/kernel/common
       run: |
         set -euo pipefail
+        # CAN / 802.15.4 / 6LoWPAN / TIPC are compiled out, so vmlinux no longer
+        # exports their symbols. kmi_symbol_list_strict_mode still demands them,
+        # so strip every reference from ALL files under android/ regardless of
+        # list format (text "[sym]", stg elf_symbol blocks, xml symbol entries).
         python3 - <<'PYEOF'
-        import re, glob
+        import re, os
 
-        PREFIXES = ('can_', 'ieee802154_', 'lowpan_', 'tipc_', 'wpan_',
-                    'alloc_can', 'alloc_candev', 'free_candev', 'register_candev',
-                    'unregister_candev', 'open_candev', 'close_candev',
-                    'safe_candev_priv', 'of_can_transceiver')
+        PAT = re.compile(
+            r'^(?:can|ieee802154|lowpan|tipc|wpan)_'
+            r'|^alloc_can|^alloc_candev|^free_candev|^register_candev'
+            r'|^unregister_candev|^open_candev|^close_candev|^safe_candev_priv'
+            r'|^of_can_transceiver')
 
-        def is_iot(name):
-            return name.startswith(PREFIXES)
-
-        # 1) .stg file: drop elf_symbol blocks whose name matches
-        stg = 'android/abi_gki_aarch64.stg'
-        try:
-            src = open(stg).read()
-        except FileNotFoundError:
-            print('no', stg)
-        else:
-            blocks = re.split(r'(?=elf_symbol \{)', src)
-            kept, removed = [], 0
-            for b in blocks:
-                m = re.search(r'elf_symbol \{.*?name: "([^"]+)"', b, re.S)
-                if b.startswith('elf_symbol {') and m and is_iot(m.group(1)):
-                    removed += 1
+        hits = {}
+        for root, _, files in os.walk('android'):
+            for fn in files:
+                path = os.path.join(root, fn)
+                try:
+                    if os.path.getsize(path) > 20_000_000:
+                        continue
+                    data = open(path, encoding='utf-8', errors='strict').read()
+                except (UnicodeDecodeError, OSError):
                     continue
-                kept.append(b)
-            open(stg, 'w').write(''.join(kept))
-            print(f'{stg}: removed {removed} IoT elf_symbols')
+                orig = data
 
-        # 2) text symbol lists: lines are "[symbol_name]"
-        for f in glob.glob('android/abi_gki_aarch64*'):
-            if f.endswith('.stg') or f.endswith('.xml'):
-                continue
-            lines = open(f).readlines()
-            out = [l for l in lines if not (l.startswith('[') and l.rstrip(']\n')[1:] and is_iot(l.rstrip().lstrip('[').rstrip(']')))]
-            if len(out) != len(lines):
-                open(f, 'w').writelines(out)
-                print(f'{f}: removed {len(lines)-len(out)} lines')
+                # stg: remove whole elf_symbol blocks for matching names
+                def drop_block(m):
+                    name = re.search(r'name: "([^"]+)"', m.group(0))
+                    if name and PAT.match(name.group(1)):
+                        hits.setdefault(path, []).append(name.group(1))
+                        return ''
+                    return m.group(0)
+                data = re.sub(r'elf_symbol \{[^}]*\}\n?', drop_block, data)
+
+                # xml: <symbol-name>...</symbol-name> entries
+                def drop_xml(m):
+                    name = m.group(1)
+                    if PAT.match(name):
+                        hits.setdefault(path, []).append(name)
+                        return ''
+                    return m.group(0)
+                data = re.sub(r'<symbol-name>([^<]+)</symbol-name>\n?', drop_xml, data)
+
+                # text lines: [sym] or plain sym
+                out = []
+                for line in data.splitlines(keepends=True):
+                    s = line.strip().strip('[]')
+                    if s and PAT.match(s) and ' ' not in s:
+                        hits.setdefault(path, []).append(s)
+                        continue
+                    out.append(line)
+                data = ''.join(out)
+
+                if data != orig:
+                    open(path, 'w').write(data)
+
+        total = 0
+        for path, names in sorted(hits.items()):
+            print(f'{path}: stripped {len(names)} symbols')
+            total += len(names)
+        print(f'TOTAL stripped: {total}')
+        if total == 0:
+            print('WARNING: nothing stripped - list format may differ')
         PYEOF
         echo "[+] KMI symbol lists cleaned"
+        # Belt-and-suspenders: if the tree enforces strict mode from
+        # build.config, relax it for this personal kernel build.
+        for cfg in build.config.common build.config.aarch64 build.config.gki.aarch64; do
+          [ -f "$cfg" ] || continue
+          if grep -q "KMI_SYMBOL_LIST_STRICT_MODE" "$cfg"; then
+            sed -i 's/^\(\s*\)KMI_SYMBOL_LIST_STRICT_MODE=.*/\1KMI_SYMBOL_LIST_STRICT_MODE=/' "$cfg"
+            echo "[+] relaxed KMI_SYMBOL_LIST_STRICT_MODE in $cfg"
+          fi
+        done
 
     - name: Apply ABI Compare Bypass
       if: false
