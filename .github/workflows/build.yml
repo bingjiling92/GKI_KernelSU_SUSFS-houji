@@ -434,22 +434,17 @@ jobs:
       if: contains(inputs.feature_set, 'NoMount') || inputs.feature_set == 'All'
       uses: ./.github/actions/hybridmount
 
-    - name: Houji config deltas (disable IoT stacks, keep NFC)
+    # houji SAFE MODE: only the NoMount -> HybridMount swap changes the kernel.
+    # The IoT-stack trim (CAN/6LOWPAN/IEEE802154/TIPC =n) caused a boot loop on
+    # device (2026-10-25) even after KMI list cleanup - vendor side likely
+    # references those symbols in ways the strict-mode check misses.
+    # IoT stacks stay =m (stock) until that is root-caused.
+    - name: Houji config deltas (SAFE MODE, IoT kept)
       if: contains(inputs.feature_set, 'NoMount') || inputs.feature_set == 'All'
       uses: ./.github/actions/set-kernel-config
       with:
         config_list: |
-          CONFIG_CAN=n
-          CONFIG_CAN_NETLINK=n
-          CONFIG_CAN_DEV=n
-          CONFIG_CAN_RX_OFFLOAD=n
-          CONFIG_GKI_HIDDEN_MCP251XFD_CONFIGS=n
-          CONFIG_GKI_HIDDEN_6LOWPAN_CONFIGS=n
-          CONFIG_GKI_HIDDEN_IEEE802154_CONFIGS=n
-          CONFIG_GKI_HIDDEN_TIPC_CONFIGS=n
-          CONFIG_6LOWPAN=n
-          CONFIG_IEEE802154=n
-          CONFIG_TIPC=n
+          CONFIG_HYBRIDMOUNT=y
           CONFIG_ZRAM=m
           CONFIG_ZRAM_WRITEBACK=n
 
