@@ -789,45 +789,17 @@ jobs:
 
   build-nomount-module:
     needs: resolve-sources
-    # feat/hybridmount-vfs-6.1.138: VFS is built into the kernel; no NoMount
-    # metamodule artifact is produced on this branch. Job disabled.
-    if: "false" # hybridmount branch: disabled
-    env:
-      NOMOUNT_WANTED: ${{ inputs.use_nomount || (github.event_name == 'schedule' && true) || false }}
+    # feat/hybridmount-vfs-6.1.138: VFS is built into the kernel; the NoMount
+    # metamodule artifact is not produced. The job must still SUCCEED (downstream
+    # build jobs depend on it), so it runs as a no-op.
+    if: "(github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') && !inputs.test_release_notes"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-        if: env.NOMOUNT_WANTED == 'true'
-
-      - name: Clone NoMount source at pinned commit
-        id: clone
-        if: env.NOMOUNT_WANTED == 'true'
+      - name: No-op (HybridMount VFS is built-in, no metamodule artifact)
         shell: bash
         run: |
-          set -euo pipefail
-          COMMIT="${{ needs.resolve-sources.outputs.nomount_commit }}"
-          if ! [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "NoMount commit must be a full 40-character SHA." >&2
-            exit 2
-          fi
-          echo "NoMount commit: ${COMMIT}"
-          echo "commit=${COMMIT}" >> "$GITHUB_OUTPUT"
-
-      - name: Build NoMount metamodule (nm only, no .ko)
-        if: env.NOMOUNT_WANTED == 'true'
-        id: buildmod
-        uses: ./.github/actions/nomount-metamodule
-        with:
-          commit: ${{ steps.clone.outputs.commit }}
-
-      - name: Upload NoMount metamodule
-        if: env.NOMOUNT_WANTED == 'true'
-        uses: actions/upload-artifact@v7
-        with:
-          name: NoMount-Metamodule
-          path: ${{ steps.buildmod.outputs.module_dir }}
-          if-no-files-found: error
-          compression-level: 0
+          echo "feat/hybridmount-vfs-6.1.138: skipping NoMount metamodule build;"
+          echo "VFS is integrated into the kernel via .github/actions/hybridmount"
 
   build-android12-5-10:
     needs:
