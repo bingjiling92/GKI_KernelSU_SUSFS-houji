@@ -1,0 +1,76 @@
+name: 'Setup HybridMount VFS'
+description: 'Integrate HybridMount VFS path redirection (forked from NoMount) and enable CONFIG_HYBRIDMOUNT; requires NoMount to be absent'
+
+runs:
+  using: composite
+  steps:
+    - name: Integrate HybridMount
+      id: integrate
+      shell: bash
+      working-directory: ${{ github.workspace }}/kernel
+      run: |
+        set -euo pipefail
+
+        KERNEL_DIR="${{ github.workspace }}/kernel/common"
+        ACTION_DIR="${{ github.workspace }}/.github/actions/hybridmount"
+        test -d "$KERNEL_DIR/fs" || {
+          echo "Kernel source directory does not exist: $KERNEL_DIR/fs" >&2
+          exit 1
+        }
+
+        # Guard: NoMount must not be present in the tree (both hijack inode ops)
+        if [ -d "$KERNEL_DIR/fs/nomount" ]; then
+          echo "ERROR: fs/nomount exists; NoMount and HybridMount cannot coexist" >&2
+          exit 1
+        fi
+        if grep -q '^CONFIG_NOMOUNT=' "$KERNEL_DIR/arch/arm64/configs/gki_defconfig" 2>/dev/null; then
+          echo "ERROR: CONFIG_NOMOUNT is set in gki_defconfig" >&2
+          exit 1
+        fi
+
+        # Copy sources into the tree (same layout as module setup.sh)
+        mkdir -p "$KERNEL_DIR/fs/hybridmount"
+        cp -f "$ACTION_DIR"/src/hybridmount.c \
+              "$ACTION_DIR"/src/hybridmount.h \
+              "$ACTION_DIR"/src/Kconfig \
+              "$ACTION_DIR"/src/LICENSE \
+              "$KERNEL_DIR/fs/hybridmount/"
+
+        # In-tree Kbuild Makefile (out-of-tree Makefile is replaced)
+        printf 'obj-$(CONFIG_HYBRIDMOUNT) += hybridmount.o\nccflags-y += -std=gnu11 -Wno-declaration-after-statement\n' \
+          > "$KERNEL_DIR/fs/hybridmount/Makefile"
+
+        # Wire into fs/Makefile + fs/Kconfig (idempotent)
+        if ! grep -qF 'obj-$(CONFIG_HYBRIDMOUNT) += hybridmount/' "$KERNEL_DIR/fs/Makefile"; then
+          printf '\nobj-$(CONFIG_HYBRIDMOUNT) += hybridmount/\n' >> "$KERNEL_DIR/fs/Makefile"
+        fi
+        if ! grep -qF 'source "fs/hybridmount/Kconfig"' "$KERNEL_DIR/fs/Kconfig"; then
+          # Insert before the final endmenu of fs/Kconfig (same as setup.sh)
+          awk '
+            /^endmenu/ { last = NR }
+            { lines[NR] = $0 }
+            END {
+              for (i = 1; i <= NR; i++) {
+                if (i == last) print "source \"fs/hybridmount/Kconfig\""
+                print lines[i]
+              }
+            }
+          ' "$KERNEL_DIR/fs/Kconfig" > "$KERNEL_DIR/fs/Kconfig.tmp"
+          mv "$KERNEL_DIR/fs/Kconfig.tmp" "$KERNEL_DIR/fs/Kconfig"
+        fi
+
+        COMMIT="$(cd "$ACTION_DIR" && git rev-parse HEAD 2>/dev/null || echo local)"
+        echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
+        echo "HybridMount integrated: fs/hybridmount/ (commit $COMMIT)"
+
+    - name: Enable CONFIG_HYBRIDMOUNT
+      shell: bash
+      working-directory: ${{ github.workspace }}/kernel/common
+      run: |
+        set -euo pipefail
+        DEFCONFIG="arch/arm64/configs/gki_defconfig"
+        LINE='CONFIG_HYBRIDMOUNT=y'
+        if ! grep -qF "$LINE" "$DEFCONFIG"; then
+          printf '\n# HybridMount VFS path redirection (houji)\n%s\n' "$LINE" >> "$DEFCONFIG"
+        fi
+        grep -F "$LINE" "$DEFCONFIG"

@@ -1,0 +1,60 @@
+name: 'Setup Misc Configs'
+description: 'Set up kernel configuration fragment with miscellaneous options'
+inputs:
+  version:
+    description: 'Kernel config version (e.g., android14-6.12)'
+    required: true
+  kernel_version:
+    description: 'Kernel version (e.g., 6.1)'
+    required: true
+  android_version:
+    description: 'Android version (e.g., android14)'
+    required: true
+  sublevel:
+    description: 'Sublevel of kernel version (e.g., 1)'
+    required: true
+  variant:
+    description: 'Build variant (Normal, Bypass, Wild, boot-time)'
+    required: true
+
+# ---------------------------------------------------------------------------
+# icecream FINAL2 -- restore stock memory semantics
+#
+# Deltas vs stock, all runtime-behavior only, no exported-symbol changes:
+#   MODULE_FORCE_LOAD / MODULE_FORCE_UNLOAD : relax module vermagic check
+#   WQ_POWER_EFFICIENT_DEFAULT              : idle workqueue power saving
+#
+# Removed vs phase-1 (root cause of the desktop crashes):
+#   CONFIG_INIT_ON_ALLOC_DEFAULT_ON=n
+#   Stock clears every allocation. MIUI's MiBackgroundBlurBlend wraps an
+#   AHardwareBuffer into a GrBackendTexture, and gralloc/QTI mapper paths
+#   rely on zeroed metadata pages. Without init_on_alloc the buffer carries
+#   previous-user garbage; Skia validates the texture as invalid and hwui
+#   aborts (AutoBackendTextureRelease.cpp, com.miui.home, 5 crashes on
+#   2026-10-19). Confirmed against tombstone_00 @ 02:07.
+#
+# ZRAM/ZSMALLOC stay =m exactly as stock: first-stage init loads
+# /lib/modules/zram.ko at 0.233660s and the module contract must hold.
+#
+# config_list is interpolated into a bash script: comments stay ASCII.
+# ---------------------------------------------------------------------------
+runs:
+  using: "composite"
+  steps:
+    - name: Enable Kernel Configs
+      uses: ./.github/actions/set-kernel-config
+      with:
+        config_list: |
+          CONFIG_OVERLAY_FS=y
+          CONFIG_TMPFS_XATTR=y
+          CONFIG_TMPFS_POSIX_ACL=y
+          CONFIG_KALLSYMS=y
+          CONFIG_KALLSYMS_ALL=y
+
+          # Relax module vermagic enforcement, e.g. hybridmount built for
+          # 6.1.166 loading on this 6.1.138 kernel.
+          CONFIG_MODULE_FORCE_LOAD=y
+          CONFIG_MODULE_FORCE_UNLOAD=y
+
+          # Power saving: idle workqueues release the bound worker.
+          CONFIG_WQ_POWER_EFFICIENT_DEFAULT=y

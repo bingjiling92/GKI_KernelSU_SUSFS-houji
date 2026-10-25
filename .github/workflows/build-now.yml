@@ -1,0 +1,30 @@
+name: Build HybridMount Kernel Now (houji)
+on:
+  push:
+    branches: [feat/hybridmount-vfs-6.1.138]
+    paths: ['.github/workflows/build-now.yml']
+  workflow_dispatch:
+
+jobs:
+  build:
+    uses: ./.github/workflows/main.yml
+    with:
+      release_type: CI
+      use_cache: false
+      kernel_build_version: 6.1.x-android14
+      os_patch_level: "138"
+      brand_name: icecream
+      commit_mode: verified
+      root_flavor: KernelSU
+      use_susfs: true
+      use_nomount: true
+      use_bbg: false
+      use_net: true
+      use_ds: false
+      use_ntsync: false
+      use_ptrace: true
+      use_unicode: true
+      use_bpf: true
+      use_perf: false
+      test_release_notes: false
+    secrets: inherit
