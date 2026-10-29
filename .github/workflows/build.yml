@@ -365,10 +365,7 @@ jobs:
       if: (contains(inputs.feature_set, 'BBG') || inputs.feature_set == 'All')
       uses: ./.github/actions/bbg
 
-    - name: LZ4KD ZRAM Algorithm (houji 6.1)
-      uses: ./.github/actions/lz4kd-houji
-      with:
-        version: ${{ inputs.version }}
+    # LZ4KD removed: zram stays stock (final2)
 
     - name: Setup Networking
       if: contains(inputs.feature_set, 'NET') || inputs.feature_set == 'All'
@@ -430,9 +427,7 @@ jobs:
         version: ${{ inputs.version }}
         kernel_version: ${{ inputs.kernel_version }}
 
-    - name: Integrate HybridMount VFS (replaces NoMount, houji)
-      if: contains(inputs.feature_set, 'NoMount') || inputs.feature_set == 'All'
-      uses: ./.github/actions/hybridmount
+    # HybridMount VFS removed: not built-in (final2)
 
     # houji SAFE MODE: only the NoMount -> HybridMount swap changes the kernel.
     # The IoT-stack trim (CAN/6LOWPAN/IEEE802154/TIPC =n) caused a boot loop on
@@ -444,7 +439,6 @@ jobs:
       uses: ./.github/actions/set-kernel-config
       with:
         config_list: |
-          CONFIG_HYBRIDMOUNT=y
           CONFIG_ZRAM=m
           CONFIG_ZRAM_WRITEBACK=n
 
