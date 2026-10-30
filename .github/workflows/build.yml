@@ -435,7 +435,7 @@ jobs:
     # references those symbols in ways the strict-mode check misses.
     # IoT stacks stay =m (stock) until that is root-caused.
     - name: Houji config deltas (SAFE MODE, IoT kept)
-      if: contains(inputs.feature_set, 'NoMount') || inputs.feature_set == 'All'
+      if: false
       uses: ./.github/actions/set-kernel-config
       with:
         config_list: |
@@ -761,7 +761,7 @@ jobs:
         # NoMount is optional (nomount_commit input is always populated, so
         # feature_set is the only reliable signal for whether it was built).
         NOMOUNT_ENABLED="false"
-        if [ "${{ contains(inputs.feature_set, 'NoMount') || inputs.feature_set == 'All' }}" = "true" ]; then
+        if [ "${{ false }}" = "true" ]; then
           NOMOUNT_ENABLED="true"
         fi
         
@@ -912,7 +912,7 @@ jobs:
         # (nomount_commit input is always populated, so feature_set is the
         # only reliable signal for whether NoMount was integrated.)
         NOMOUNT_ENABLED="false"
-        if [ "${{ contains(inputs.feature_set, 'NoMount') || inputs.feature_set == 'All' }}" = "true" ]; then
+        if [ "${{ false }}" = "true" ]; then
           NOMOUNT_ENABLED="true"
         fi
 
