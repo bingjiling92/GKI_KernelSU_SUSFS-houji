@@ -156,7 +156,22 @@ runs:
       shell: bash
       working-directory: ${{ github.workspace }}/kernel/common
       run: |
-        patch -p1 < 50_add_susfs_in_gki-${{ inputs.version }}.patch
+        NS=fs/namespace.c
+        NS_STUB=0
+        if [ -f "$NS" ] && ! grep -q '#include <trace/hooks/blk.h>' "$NS"; then
+          sed -i 's|^#include "internal.h"$|#include "internal.h"\n#include <trace/hooks/blk.h>|' "$NS"
+          NS_STUB=1
+          echo "[*] injected trace/hooks/blk.h context anchor into $NS"
+        fi
+        set +e
+        patch -p1 --forward --batch < 50_add_susfs_in_gki-${{ inputs.version }}.patch
+        RC=$?
+        set -e
+        if [ "$NS_STUB" = "1" ]; then
+          sed -i '\|^#include <trace/hooks/blk.h>$|d' "$NS"
+          echo "[*] removed injected context anchor from $NS"
+        fi
+        [ "$RC" -eq 0 ] || exit "$RC"
 
         # SUSFS's OPEN_REDIRECT code unconditionally calls VMA_PAD_START(), which
         # only exists on GKI branches that carry Google's page-size-migration
