@@ -51,7 +51,33 @@ runs:
           exit 1
         fi
         echo "Applying SUSFS enable patch to KernelSU (tiann) checkout (kernel/KernelSU/kernel)"
-        patch -p1 < "$PATCH"
+        if patch -p1 --forward --batch < "$PATCH"; then
+          echo "[+] 10_enable_susfs_for_ksu.patch applied cleanly"
+        else
+          # bec9c134 already carries the avc/seqno generation tracking the
+          # patch rewrites in kernel/selinux/rules.c, so those hunks come back
+          # as "Reversed (or previously applied)". Tolerate exactly that file,
+          # drop its .rej so scan-patch-rejects stays green, fail on anything else.
+          BAD=0
+          while IFS= read -r R; do
+            [ -n "$R" ] || continue
+            case "$R" in
+              ./kernel/selinux/rules.c.rej|kernel/selinux/rules.c.rej)
+                echo "[*] rules.c hunks already upstream - dropping $(basename "$R")"
+                rm -f "$R"
+                ;;
+              *)
+                echo "[!] unexpected reject: $R"
+                BAD=1
+                ;;
+            esac
+          done < <(find . -name '*.rej' 2>/dev/null)
+          if [ "$BAD" -ne 0 ]; then
+            echo "[x] 10_enable patch produced non-tolerable rejects" >&2
+            exit 1
+          fi
+          echo "[+] 10_enable_susfs_for_ksu.patch applied (upstream-equal hunks skipped)"
+        fi
 
     - name: Enable SUSFS Kernel Configs
       uses: ./.github/actions/susfs-config
