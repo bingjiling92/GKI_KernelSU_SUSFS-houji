@@ -249,7 +249,7 @@ jobs:
           # 10_enable_susfs_for_ksu.patch onto this layout - it fails with 17
           # rejected hunks at the old 08a3b087 pin (run 38337419484) and
           # applies clean at 0c0fdb96. BBG is kernel-side and unaffected.
-          PIN_KERNELSU="0c0fdb960178fa12d80d6cbcfdcb6ad8be6a865d"
+          PIN_KERNELSU="bec9c1347472e26d3d7c46cccb7be801a9c9a6b9"
           # BakaSU: fa12ffd (2026-10-11, tiann #3877 selinux_hide refactor)
           # REMOVED `struct selinux_state fake_state` from their tree, but the
           # fs patches (50_add_susfs) on 12-5.10/13-5.10/13-5.15/14-5.15/14-6.1
