@@ -156,48 +156,54 @@ runs:
       shell: bash
       working-directory: ${{ github.workspace }}/kernel/common
       run: |
-        # SUSFS 50_ patch hunk #1 for fs/namespace.c expects a blank line after
-        # mnt_idmapping.h plus a <trace/hooks/blk.h> include. GKI android14-6.1
-        # drops blk.h at sublevel >= 157 and never keeps the blank line, so the
-        # anchor block is normalized before patching and restored right after.
         NS=fs/namespace.c
-        NS_STUB=0
-        if [ -f "$NS" ]; then
-          python3 - "$NS" <<'PYEOF'
-        import sys
-        p = sys.argv[1]
-        s = open(p).read()
-        orig = s
-        if '#include <linux/mnt_idmapping.h>\n#include "pnode.h"' in s:
-            s = s.replace('#include <linux/mnt_idmapping.h>\n#include "pnode.h"',
-                          '#include <linux/mnt_idmapping.h>\n\n#include "pnode.h"', 1)
-        if 'trace/hooks/blk.h' not in s:
-            s = s.replace('#include "internal.h"\n',
-                          '#include "internal.h"\n#include <trace/hooks/blk.h>\n\n', 1)
-        if s != orig:
-            open(p, 'w').write(s)
-            print('[*] normalized include anchors in ' + p)
-        PYEOF
-          NS_STUB=1
-        fi
         set +e
         patch -p1 --forward --batch < 50_add_susfs_in_gki-${{ inputs.version }}.patch
         RC=$?
         set -e
-        if [ "$NS_STUB" = "1" ]; then
-          python3 - "$NS" <<'PYEOF'
+        # hunk #1 of fs/namespace.c only injects two include/extern blocks. Its
+        # context differs across GKI sublevels (blank line after mnt_idmapping.h
+        # and <trace/hooks/blk.h> presence), so those two blocks are applied
+        # textually and the reject is dropped once nothing else failed.
+        if [ -f fs/namespace.c.rej ]; then
+          python3 - <<'PYEOF'
         import sys
-        p = sys.argv[1]
+        p = 'fs/namespace.c'
         s = open(p).read()
-        s = s.replace('#include "internal.h"\n#include <trace/hooks/blk.h>\n\n',
-                      '#include "internal.h"\n', 1)
-        s = s.replace('#include <linux/mnt_idmapping.h>\n\n#include "pnode.h"',
-                      '#include <linux/mnt_idmapping.h>\n#include "pnode.h"', 1)
+        A = ('#ifdef CONFIG_KSU_SUSFS\n'
+             '#include <linux/susfs_def.h>\n'
+             '#endif // #ifdef CONFIG_KSU_SUSFS\n')
+        if 'linux/susfs_def.h' not in s:
+            key = '#include <linux/mnt_idmapping.h>\n'
+            if key in s:
+                s = s.replace(key, key + A, 1)
+                print('[*] inserted susfs_def.h include block')
+        B = ('#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT\n'
+             'extern bool susfs_is_current_ksu_domain(void);\n'
+             'extern struct static_key_true susfs_is_sdcard_android_data_not_decrypted;\n'
+             '\n'
+             '#define CL_COPY_MNT_NS BIT(25) /* used by copy_mnt_ns() */\n'
+             '#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT\n'
+             '\n')
+        if 'CL_COPY_MNT_NS' not in s:
+            for anchor in ('#include <trace/hooks/blk.h>\n', '#include "internal.h"\n'):
+                if anchor in s:
+                    s = s.replace(anchor, anchor + B, 1)
+                    print('[*] inserted SUS_MOUNT extern block')
+                    break
         open(p, 'w').write(s)
-        print('[*] restored include anchors in ' + p)
         PYEOF
+          OTHER=$(find . -name '*.rej' ! -path './fs/namespace.c.rej' | wc -l)
+          rm -f fs/namespace.c.rej
+          if [ "$OTHER" -eq 0 ]; then
+            RC=0
+            echo "[*] fs/namespace.c hunk #1 applied textually"
+          fi
         fi
-        [ "$RC" -eq 0 ] || exit "$RC"
+        if [ "$RC" -ne 0 ]; then
+          find . -name '*.rej' -print
+          exit "$RC"
+        fi
 
         # SUSFS's OPEN_REDIRECT code unconditionally calls VMA_PAD_START(), which
         # only exists on GKI branches that carry Google's page-size-migration
