@@ -684,6 +684,37 @@ jobs:
     - name: Initialize Config Fragment
       run: touch "${{ github.workspace }}/wild_gki.fragment"
 
+    # houji charge boost: kernel-side power/thermal surface.
+    # CONFIG_THERMAL_WRITABLE_TRIPS lets userspace (fastcharge module / sysfs)
+    # move thermal trip points instead of being locked to the vendor defaults,
+    # which is the only charge current ceiling the GKI tree actually controls.
+    - name: Houji charge boost config
+      shell: bash
+      run: |
+        set -euo pipefail
+        FR="${{ github.workspace }}/wild_gki.fragment"
+        touch "$FR"
+        grep -q 'CONFIG_THERMAL_WRITABLE_TRIPS' "$FR" || cat >> "$FR" <<'EOF'
+        CONFIG_POWER_SUPPLY=y
+        CONFIG_POWER_SUPPLY_HWMON=y
+        CONFIG_TYPEC=y
+        CONFIG_TYPEC_TCPM=y
+        CONFIG_TYPEC_TCPCI=y
+        CONFIG_TYPEC_TCPCI_MAXIM=y
+        CONFIG_TYPEC_MUX_PI3USB30532=y
+        CONFIG_USB_TYPEC_UCSI=y
+        CONFIG_EXTCON=y
+        CONFIG_THERMAL=y
+        CONFIG_THERMAL_OF=y
+        CONFIG_THERMAL_WRITABLE_TRIPS=y
+        CONFIG_THERMAL_DEFAULT_GOV_STEP_WISE=y
+        CONFIG_THERMAL_GOV_STEP_WISE=y
+        CONFIG_CPU_FREQ_GOV_SCHEDUTIL=y
+        CONFIG_CPU_BOOST=y
+        EOF
+        echo "--- fragment after charge boost ---"
+        cat "$FR"
+
     - name: Apply Kernel Bypass Hack
       if: ${{ inputs.allow_version_mismatch == 'true' }}
       uses: ./.github/actions/bypass-kernel
