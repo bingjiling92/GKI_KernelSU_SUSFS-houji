@@ -156,20 +156,46 @@ runs:
       shell: bash
       working-directory: ${{ github.workspace }}/kernel/common
       run: |
+        # SUSFS 50_ patch hunk #1 for fs/namespace.c expects a blank line after
+        # mnt_idmapping.h plus a <trace/hooks/blk.h> include. GKI android14-6.1
+        # drops blk.h at sublevel >= 157 and never keeps the blank line, so the
+        # anchor block is normalized before patching and restored right after.
         NS=fs/namespace.c
         NS_STUB=0
-        if [ -f "$NS" ] && ! grep -q '#include <trace/hooks/blk.h>' "$NS"; then
-          sed -i 's|^#include "internal.h"$|#include "internal.h"\n#include <trace/hooks/blk.h>|' "$NS"
+        if [ -f "$NS" ]; then
+          python3 - "$NS" <<'PYEOF'
+        import sys
+        p = sys.argv[1]
+        s = open(p).read()
+        orig = s
+        if '#include <linux/mnt_idmapping.h>\n#include "pnode.h"' in s:
+            s = s.replace('#include <linux/mnt_idmapping.h>\n#include "pnode.h"',
+                          '#include <linux/mnt_idmapping.h>\n\n#include "pnode.h"', 1)
+        if 'trace/hooks/blk.h' not in s:
+            s = s.replace('#include "internal.h"\n',
+                          '#include "internal.h"\n#include <trace/hooks/blk.h>\n\n', 1)
+        if s != orig:
+            open(p, 'w').write(s)
+            print('[*] normalized include anchors in ' + p)
+        PYEOF
           NS_STUB=1
-          echo "[*] injected trace/hooks/blk.h context anchor into $NS"
         fi
         set +e
         patch -p1 --forward --batch < 50_add_susfs_in_gki-${{ inputs.version }}.patch
         RC=$?
         set -e
         if [ "$NS_STUB" = "1" ]; then
-          sed -i '\|^#include <trace/hooks/blk.h>$|d' "$NS"
-          echo "[*] removed injected context anchor from $NS"
+          python3 - "$NS" <<'PYEOF'
+        import sys
+        p = sys.argv[1]
+        s = open(p).read()
+        s = s.replace('#include "internal.h"\n#include <trace/hooks/blk.h>\n\n',
+                      '#include "internal.h"\n', 1)
+        s = s.replace('#include <linux/mnt_idmapping.h>\n\n#include "pnode.h"',
+                      '#include <linux/mnt_idmapping.h>\n#include "pnode.h"', 1)
+        open(p, 'w').write(s)
+        print('[*] restored include anchors in ' + p)
+        PYEOF
         fi
         [ "$RC" -eq 0 ] || exit "$RC"
 
