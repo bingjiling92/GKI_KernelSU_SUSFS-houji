@@ -1,0 +1,58 @@
+name: 'Houji Charge Boost'
+description: 'Inject houji_charge kernel driver + Kconfig/Makefile wiring and enable CONFIG_HOUJI_CHARGE'
+
+inputs:
+  version:
+    description: 'Kernel config version (e.g., android14-6.1)'
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Inject houji_charge driver into kernel tree
+      if: inputs.version == 'android14-6.1'
+      shell: bash
+      working-directory: ${{ github.workspace }}/kernel/common
+      run: |
+        set -euo pipefail
+        SRC="${{ github.workspace }}/extras/houji_charge"
+        DST="drivers/houji_charge"
+        test -f "$SRC/houji_charge.c" || { echo "Missing $SRC/houji_charge.c" >&2; exit 1; }
+        test -f "$SRC/Kconfig" || { echo "Missing $SRC/Kconfig" >&2; exit 1; }
+
+        mkdir -p "$DST"
+        cp -f "$SRC/houji_charge.c" "$DST/houji_charge.c"
+        cp -f "$SRC/Kconfig" "$DST/Kconfig"
+
+        # Wire drivers/Kconfig (idempotent)
+        if ! grep -q 'source "drivers/houji_charge/Kconfig"' drivers/Kconfig; then
+          printf '\nsource "drivers/houji_charge/Kconfig"\n' >> drivers/Kconfig
+          echo "[+] drivers/Kconfig wired"
+        else
+          echo "[=] drivers/Kconfig already wired"
+        fi
+
+        # Wire drivers/Makefile (idempotent)
+        if ! grep -q 'obj-$(CONFIG_HOUJI_CHARGE)' drivers/Makefile; then
+          printf 'obj-$(CONFIG_HOUJI_CHARGE) += houji_charge/\n' >> drivers/Makefile
+          echo "[+] drivers/Makefile wired"
+        else
+          echo "[=] drivers/Makefile already wired"
+        fi
+
+        echo "--- drivers/Makefile tail ---"
+        tail -3 drivers/Makefile
+
+    - name: Enable CONFIG_HOUJI_CHARGE in fragment
+      if: inputs.version == 'android14-6.1'
+      shell: bash
+      run: |
+        set -euo pipefail
+        FR="${{ github.workspace }}/wild_gki.fragment"
+        touch "$FR"
+        if ! grep -q 'CONFIG_HOUJI_CHARGE' "$FR"; then
+          printf 'CONFIG_HOUJI_CHARGE=y\n' >> "$FR"
+          echo "[+] CONFIG_HOUJI_CHARGE=y added to fragment"
+        else
+          echo "[=] CONFIG_HOUJI_CHARGE already in fragment"
+        fi
