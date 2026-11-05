@@ -18,13 +18,13 @@ jobs:
       root_flavor: KernelSU
       use_susfs: true
       use_nomount: true
-      use_bbg: false
+      use_bbg: true
       use_net: true
-      use_ds: false
-      use_ntsync: false
+      use_ds: true
+      use_ntsync: true
       use_ptrace: true
       use_unicode: true
       use_bpf: true
-      use_perf: false
+      use_perf: true
       test_release_notes: false
     secrets: inherit
