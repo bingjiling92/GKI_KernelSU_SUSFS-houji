@@ -1,0 +1,10 @@
+config HOUJI_CHARGE
+	bool "Houji charge boost driver"
+	depends on THERMAL && POWER_SUPPLY
+	default n
+	help
+	  Kernel-side charge boost for Xiaomi 14 (houji). Unlocks vendor
+	  charge current limits at boot, keeps a 40-50W daily charging
+	  target with a temperature closed loop (drop to 30W at >=45C,
+	  restore at <=40C), and auto-recovers from ChargingSus stalls
+	  via input_suspend pulse. Runtime interface: /proc/houji_charge.
