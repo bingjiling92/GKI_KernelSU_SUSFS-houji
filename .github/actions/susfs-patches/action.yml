@@ -185,13 +185,38 @@ runs:
              '#define CL_COPY_MNT_NS BIT(25) /* used by copy_mnt_ns() */\n'
              '#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT\n'
              '\n')
-        if 'CL_COPY_MNT_NS' not in s:
-            for anchor in ('#include <trace/hooks/blk.h>\n', '#include "internal.h"\n'):
+        def place(block, present, name):
+            global s
+            if present in s:
+                return True
+            for anchor in ('#include <trace/hooks/blk.h>\n', '#include "internal.h"\n',
+                           '#include <linux/mnt_idmapping.h>\n'):
                 if anchor in s:
-                    s = s.replace(anchor, anchor + B, 1)
-                    print('[*] inserted SUS_MOUNT extern block')
-                    break
+                    s = s.replace(anchor, anchor + block, 1)
+                    print('[*] inserted ' + name)
+                    return True
+            idx = s.find('#include')
+            if idx != -1:
+                eol = s.find('\n', idx)
+                s = s[:eol + 1] + block + s[eol + 1:]
+                print('[*] inserted ' + name + ' at first include')
+                return True
+            return False
+        # The use sites of CL_COPY_MNT_NS land via other hunks even when
+        # hunk #1 fails, so gate the extern block on the definition.
+        if not place(B, '#define CL_COPY_MNT_NS', 'SUS_MOUNT extern block'):
+            print('[x] SUS_MOUNT extern block placement failed')
+            sys.exit(1)
         open(p, 'w').write(s)
+        s2 = open(p).read()
+        missing = [k for k in ('#define CL_COPY_MNT_NS',
+                               'extern bool susfs_is_current_ksu_domain',
+                               'susfs_is_sdcard_android_data_not_decrypted',
+                               'linux/susfs_def.h') if k not in s2]
+        if missing:
+            print('[x] namespace.c textual fix incomplete: missing=' + ','.join(missing))
+            sys.exit(1)
+        print('[+] namespace.c SUSFS header/extern blocks verified')
         PYEOF
           OTHER=$(find . -name '*.rej' ! -path './fs/namespace.c.rej' | wc -l)
           rm -f fs/namespace.c.rej
