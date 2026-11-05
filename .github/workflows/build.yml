@@ -715,6 +715,11 @@ jobs:
         echo "--- fragment after charge boost ---"
         cat "$FR"
 
+    - name: Apply Houji Charge Boost driver
+      uses: ./.github/actions/houji-charge
+      with:
+        version: ${{ inputs.version }}
+
     - name: Apply Kernel Bypass Hack
       if: ${{ inputs.allow_version_mismatch == 'true' }}
       uses: ./.github/actions/bypass-kernel
