@@ -12,7 +12,10 @@ jobs:
       release_type: CI
       use_cache: false
       kernel_build_version: 6.1.x-android14
-      os_patch_level: "138"
+      # 2025-06 = sublevel 138 = OS3.0.307.0 的 GKI 源码分支
+      os_patch_level: "2025-06"
+      # 保留 stock KMI generation 后缀（-android14-11-），与 system_dlkm 模块一致
+      keep_kmi: true
       brand_name: icecream
       commit_mode: verified
       root_flavor: KernelSU
